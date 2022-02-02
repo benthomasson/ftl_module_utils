@@ -35,7 +35,7 @@ setup(
     include_package_data=True,
     keywords='ftl_module_utils',
     name='ftl_module_utils',
-    packages=find_packages(include=['ftl_module_utils', 'ftl_module_utils.*']),
+    packages=find_packages(include=['ansible', 'ftl_module_utils']),
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/benthomasson/ftl_module_utils',
