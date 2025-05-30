@@ -1,0 +1,12 @@
+[project]
+name = "ftl-module-utils"
+version = "0.1.0"
+
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["ftl_module_utils*", "ansible*"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
