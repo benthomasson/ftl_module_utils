@@ -3,12 +3,13 @@
 # Simplified BSD License (see licenses/simplified_bsd.txt or https://opensource.org/licenses/BSD-2-Clause)
 """Collection of low-level utility functions."""
 
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+from __future__ import annotations
 
 
-from ansible.module_utils.six import binary_type, text_type
-from ansible.module_utils.common._collections_compat import Hashable, Mapping, MutableMapping, Sequence
+from collections.abc import Hashable, Mapping, MutableMapping, Sequence  # pylint: disable=unused-import
+
+from ansible.module_utils._internal import _no_six
+from ansible.module_utils.common import warnings as _warnings
 
 
 class ImmutableDict(Hashable, Mapping):
@@ -66,9 +67,8 @@ class ImmutableDict(Hashable, Mapping):
 
 
 def is_string(seq):
-    """Identify whether the input has a string-like type (inclding bytes)."""
-    # AnsibleVaultEncryptedUnicode inherits from Sequence, but is expected to be a string like object
-    return isinstance(seq, (text_type, binary_type)) or getattr(seq, '__ENCRYPTED__', False)
+    """Identify whether the input has a string-like type (including bytes)."""
+    return isinstance(seq, (str, bytes))
 
 
 def is_iterable(seq, include_strings=False):
@@ -104,9 +104,18 @@ def count(seq):
     code is run on Python 2.6.* where collections.Counter is not available. It should be
     deprecated and replaced when support for Python < 2.7 is dropped.
     """
+    _warnings.deprecate(
+        msg="The `ansible.module_utils.common.collections.count` function is deprecated.",
+        version="2.23",
+        help_text="Use `collections.Counter` from the Python standard library instead.",
+    )
     if not is_iterable(seq):
         raise Exception('Argument provided  is not an iterable')
     counters = dict()
     for elem in seq:
         counters[elem] = counters.get(elem, 0) + 1
     return counters
+
+
+def __getattr__(importable_name):
+    return _no_six.deprecate(importable_name, __name__, "binary_type", "text_type")
