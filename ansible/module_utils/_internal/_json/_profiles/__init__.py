@@ -426,3 +426,16 @@ def _recursively_check_string_encoding(value: t.Any) -> None:
     elif value_type is list:  # dict is handled by the JSON deserializer
         for item in value:
             _recursively_check_string_encoding(item)
+
+
+# Import all profile modules to ensure they are discovered by bundle dependency detection.
+# These are normally loaded dynamically via importlib, but static imports are needed
+# for AST-based dependency scanning to include them in bundles.
+from ansible.module_utils._internal._json._profiles import (
+    _fallback_to_str,
+    _module_legacy_c2m,
+    _module_legacy_m2c,
+    _module_modern_c2m,
+    _module_modern_m2c,
+    _tagless,
+)
