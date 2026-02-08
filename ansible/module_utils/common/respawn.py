@@ -10,7 +10,6 @@ import sys
 import typing as t
 
 from ansible.module_utils.common.text.converters import to_bytes
-from ansible.module_utils._internal._ansiballz import _respawn
 
 _ANSIBLE_PARENT_PATH = pathlib.Path(__file__).parents[3]
 
@@ -36,16 +35,7 @@ def respawn_module(interpreter_path) -> t.NoReturn:
     :arg interpreter_path: path to a Python interpreter to respawn the current module
     """
 
-    if has_respawned():
-        raise Exception('module has already been respawned')
-
-    # FUTURE: we need a safe way to log that a respawn has occurred for forensic/debug purposes
-    payload = _respawn.create_payload()
-    stdin_read, stdin_write = os.pipe()
-    os.write(stdin_write, to_bytes(payload))
-    os.close(stdin_write)
-    rc = subprocess.call([interpreter_path, '--'], stdin=stdin_read)
-    sys.exit(rc)  # pylint: disable=ansible-bad-function
+    raise NotImplementedError('Module respawning is not supported in FTL')
 
 
 def probe_interpreters_for_module(interpreter_paths, module_name):

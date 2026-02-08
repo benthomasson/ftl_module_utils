@@ -25,7 +25,7 @@ import sys
 import time
 
 from ansible.module_utils._internal import _no_six
-from ansible.module_utils._internal._concurrent import _futures
+import concurrent.futures
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.text.converters import to_text
 from ansible.module_utils.common.text.formatters import bytes_to_human
@@ -575,7 +575,7 @@ class LinuxHardware(Hardware):
 
         # start threads to query each mount
         results = {}
-        executor = _futures.DaemonThreadPoolExecutor()
+        executor = concurrent.futures.ThreadPoolExecutor()
         maxtime = timeout.GATHER_TIMEOUT or timeout.DEFAULT_GATHER_TIMEOUT
         for fields in mtab_entries:
             # Transform octal escape sequences

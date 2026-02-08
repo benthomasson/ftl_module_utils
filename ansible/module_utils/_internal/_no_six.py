@@ -3,8 +3,6 @@ from __future__ import annotations
 import sys
 import types
 
-from ansible.module_utils.common import warnings
-
 
 # INLINED FROM THE SIX LIBRARY, see lib/ansible/module_utils/six/__init__.py
 # Copyright (c) 2010-2024 Benjamin Peterson
@@ -73,14 +71,9 @@ _mini_six = {
 
 
 def deprecate(importable_name: str, module_name: str, *deprecated_args) -> object:
-    """Inject import-time deprecation warnings."""
-    if not (importable_name in deprecated_args and (importable := _mini_six.get(importable_name, ...) is not ...)):
-        raise AttributeError(f"module {module_name!r} has no attribute {importable_name!r}")
-
-    # TODO Inspect and remove all calls to this function in 2.24
-    warnings.deprecate(
-        msg=f"Importing {importable_name!r} from {module_name!r} is deprecated.",
-        version="2.24",
-    )
-
-    return importable
+    """Return the importable from _mini_six if it exists, otherwise raise AttributeError."""
+    if importable_name in deprecated_args:
+        importable = _mini_six.get(importable_name)
+        if importable is not None:
+            return importable
+    raise AttributeError(f"module {module_name!r} has no attribute {importable_name!r}")

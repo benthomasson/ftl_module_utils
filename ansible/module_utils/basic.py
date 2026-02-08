@@ -27,7 +27,6 @@ if sys.version_info < _PY_MIN:
 
 import __main__
 import atexit
-import dataclasses as _dataclasses
 import errno
 import grp
 import fcntl
@@ -85,8 +84,6 @@ except ImportError:
 # Python2 & 3 way to get NoneType
 NoneType = type(None)
 
-from ._internal import _traceback, _errors, _debugging, _deprecator, _messages
-
 from .common.text.converters import (
     to_native,
     to_bytes,
@@ -104,8 +101,6 @@ from ansible.module_utils.common.text.formatters import (
     human_to_bytes,
     SIZE_RANGES,
 )
-
-from ansible.module_utils.common import json as _common_json
 
 import hashlib
 
@@ -131,7 +126,6 @@ def _get_available_hash_algorithms():
 
 AVAILABLE_HASH_ALGORITHMS = _get_available_hash_algorithms()
 
-from ansible.module_utils.common import json as _json
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.process import get_bin_path
 from ansible.module_utils.common.file import (
@@ -185,7 +179,6 @@ imap = map
 # attempt to read from stdin.  Other code should not use this directly as it
 # is an internal implementation detail
 _ANSIBLE_ARGS: bytes | None = None
-_ANSIBLE_PROFILE: str | None = None
 _PARSED_MODULE_ARGS: dict[str, t.Any] | None = None
 
 
@@ -322,20 +315,22 @@ def _load_params():
     to call this function and consume its outputs than to implement the logic
     inside it as a copy in your own code.
     """
-    global _ANSIBLE_ARGS, _ANSIBLE_PROFILE
+    global _ANSIBLE_ARGS
 
     if _ANSIBLE_ARGS is None:
-        _ANSIBLE_ARGS, _ANSIBLE_PROFILE = _debugging.load_params()
+        if len(sys.argv) > 1:
+            if os.path.isfile(sys.argv[1]):
+                with open(sys.argv[1], 'rb') as fd:
+                    _ANSIBLE_ARGS = fd.read()
+            else:
+                _ANSIBLE_ARGS = sys.argv[1].encode('utf-8', errors='surrogateescape')
+        else:
+            _ANSIBLE_ARGS = sys.stdin.buffer.read()
 
     buffer = _ANSIBLE_ARGS
-    profile = _ANSIBLE_PROFILE
-
-    if not profile:
-        raise Exception("No serialization profile was specified.")
 
     try:
-        decoder = _json.get_module_decoder(profile, _json.Direction.CONTROLLER_TO_MODULE)
-        params = json.loads(buffer.decode(), cls=decoder)
+        params = json.loads(buffer.decode('utf-8'))
     except Exception as ex:
         raise Exception("Failed to decode JSON module parameters.") from ex
 
@@ -513,8 +508,6 @@ class AnsibleModule(object):
         *,
         help_text: str | None = None,
     ) -> None:
-        _skip_stackwalk = True
-
         warn(
             warning=warning,
             help_text=help_text,
@@ -528,8 +521,6 @@ class AnsibleModule(object):
         help_text: str | None = None,
     ) -> None:
         """Display an exception as a warning."""
-        _skip_stackwalk = True
-
         error_as_warning(
             msg=msg,
             exception=exception,
@@ -543,22 +534,19 @@ class AnsibleModule(object):
         date: str | None = None,
         collection_name: str | None = None,
         *,
-        deprecator: _messages.PluginInfo | None = None,
+        deprecator: object | None = None,
         help_text: str | None = None,
     ) -> None:
         """
         Record a deprecation warning to be returned with the module result.
-        Most callers do not need to provide `collection_name` or `deprecator` -- but provide only one if needed.
         Specify `version` or `date`, but not both.
         If `date` is a string, it must be in the form `YYYY-MM-DD`.
         """
-        _skip_stackwalk = True
-
-        deprecate(  # pylint: disable=ansible-deprecated-date-not-permitted,ansible-deprecated-unnecessary-collection-name
+        deprecate(
             msg=msg,
             version=version,
             date=date,
-            deprecator=_deprecator.get_best_deprecator(deprecator=deprecator, collection_name=collection_name),
+            collection_name=collection_name,
             help_text=help_text,
         )
 
@@ -1423,7 +1411,7 @@ class AnsibleModule(object):
         # )
 
         try:
-            return json.dumps(data, cls=_common_json._get_legacy_encoder())
+            return json.dumps(data)
         except UnicodeError as e:
             self.fail_json(msg=to_text(e))
 
@@ -1439,21 +1427,12 @@ class AnsibleModule(object):
             self.cleanup(path)
 
     def _return_formatted(self, kwargs):
-        _skip_stackwalk = True
-
         self.add_path_info(kwargs)
 
         if 'invocation' not in kwargs:
             kwargs['invocation'] = {'module_args': self.params}
 
         if 'warnings' in kwargs:
-            self.deprecate(  # pylint: disable=ansible-deprecated-unnecessary-collection-name
-                msg='Passing `warnings` to `exit_json` or `fail_json` is deprecated.',
-                version='2.23',
-                help_text='Use `AnsibleModule.warn` instead.',
-                deprecator=_deprecator.ANSIBLE_CORE_DEPRECATOR,
-            )
-
             if isinstance(kwargs['warnings'], list):
                 for w in kwargs['warnings']:
                     self.warn(w)
@@ -1465,38 +1444,21 @@ class AnsibleModule(object):
             kwargs['warnings'] = warnings
 
         if 'deprecations' in kwargs:
-            self.deprecate(  # pylint: disable=ansible-deprecated-unnecessary-collection-name
-                msg='Passing `deprecations` to `exit_json` or `fail_json` is deprecated.',
-                version='2.23',
-                help_text='Use `AnsibleModule.deprecate` instead.',
-                deprecator=_deprecator.ANSIBLE_CORE_DEPRECATOR,
-            )
-
             if isinstance(kwargs['deprecations'], list):
                 for d in kwargs['deprecations']:
                     if isinstance(d, (KeysView, Sequence)) and len(d) == 2:
-                        self.deprecate(  # pylint: disable=ansible-deprecated-unnecessary-collection-name,ansible-invalid-deprecated-version
-                            msg=d[0],
-                            version=d[1],
-                            deprecator=_deprecator.get_best_deprecator(),
-                        )
+                        self.deprecate(msg=d[0], version=d[1])
                     elif isinstance(d, Mapping):
-                        self.deprecate(  # pylint: disable=ansible-deprecated-date-not-permitted,ansible-deprecated-unnecessary-collection-name
+                        self.deprecate(
                             msg=d['msg'],
                             version=d.get('version'),
                             date=d.get('date'),
-                            deprecator=_deprecator.get_best_deprecator(collection_name=d.get('collection_name')),
+                            collection_name=d.get('collection_name'),
                         )
                     else:
-                        self.deprecate(  # pylint: disable=ansible-deprecated-unnecessary-collection-name,ansible-deprecated-no-version
-                            msg=d,
-                            deprecator=_deprecator.get_best_deprecator(),
-                        )
+                        self.deprecate(msg=d)
             else:
-                self.deprecate(  # pylint: disable=ansible-deprecated-unnecessary-collection-name,ansible-deprecated-no-version
-                    msg=kwargs['deprecations'],
-                    deprecator=_deprecator.get_best_deprecator(),
-                )
+                self.deprecate(msg=kwargs['deprecations'])
 
         deprecations = get_deprecations()
         if deprecations:
@@ -1519,13 +1481,10 @@ class AnsibleModule(object):
 
         Monkeypatched by ansible.netcommon for direct in-worker module execution.
         """
-        encoder = _json.get_module_encoder(_ANSIBLE_PROFILE, _json.Direction.MODULE_TO_CONTROLLER)
-        print('\n%s' % json.dumps(o, cls=encoder))
+        print('\n%s' % json.dumps(o))
 
     def exit_json(self, **kwargs) -> t.NoReturn:
         """ return from the module, without error """
-        _skip_stackwalk = True
-
         self.do_cleanup_files()
         self._return_formatted(kwargs)
         sys.exit(0)
@@ -1533,21 +1492,7 @@ class AnsibleModule(object):
     def fail_json(self, msg: str, *, exception: BaseException | str | None = _UNSET, **kwargs) -> t.NoReturn:
         """
         Return from the module with an error message and optional exception/traceback detail.
-        A traceback will only be included in the result if error traceback capturing has been enabled.
-
-        When `exception` is an exception object, its message chain will be automatically combined with `msg` to create the final error message.
-        The message chain includes the exception's message as well as messages from any __cause__ exceptions.
-        The traceback from `exception` will be used for the formatted traceback.
-
-        When `exception` is a string, it will be used as the formatted traceback.
-
-        When `exception` is set to `None`, the current call stack will be used for the formatted traceback.
-
-        When `exception` is not specified, a formatted traceback will be retrieved from the current exception.
-        If no exception is pending, the current call stack will be used instead.
         """
-        _skip_stackwalk = True
-
         msg = str(msg)  # coerce to str instead of raising an error due to an invalid type
 
         kwargs.update(
@@ -1556,37 +1501,11 @@ class AnsibleModule(object):
         )
 
         if isinstance(exception, BaseException):
-            # Include a `_messages.Event` in the result.
-            # The `msg` is included in the chain to ensure it is not lost when looking only at `exception` from the result.
-
-            kwargs.update(
-                exception=_messages.ErrorSummary(
-                    event=_messages.Event(
-                        msg=msg,
-                        formatted_traceback=_traceback.maybe_capture_traceback(msg, _traceback.TracebackEvent.ERROR),
-                        chain=_messages.EventChain(
-                            msg_reason=_errors.MSG_REASON_DIRECT_CAUSE,
-                            traceback_reason="The above exception was the direct cause of the following error:",
-                            event=_errors.EventFactory.from_exception(exception, _traceback.is_traceback_enabled(_traceback.TracebackEvent.ERROR)),
-                        ),
-                    ),
-                ),
-            )
-        elif _traceback.is_traceback_enabled(_traceback.TracebackEvent.ERROR):
-            # Include only a formatted traceback string in the result.
-            # The controller will combine this with `msg` to create an `_messages.ErrorSummary`.
-
-            formatted_traceback: str | None
-
-            if isinstance(exception, str):
-                formatted_traceback = exception
-            elif exception is _UNSET and (current_exception := t.cast(t.Optional[BaseException], sys.exc_info()[1])):
-                formatted_traceback = _traceback.maybe_extract_traceback(current_exception, _traceback.TracebackEvent.ERROR)
-            else:
-                formatted_traceback = _traceback.maybe_capture_traceback(msg, _traceback.TracebackEvent.ERROR)
-
-            if formatted_traceback:
-                kwargs.update(exception=formatted_traceback)
+            kwargs['exception'] = traceback.format_exc()
+        elif isinstance(exception, str):
+            kwargs['exception'] = exception
+        elif exception is _UNSET and sys.exc_info()[2] and (self._debug or self._verbosity >= 3):
+            kwargs['exception'] = ''.join(traceback.format_tb(sys.exc_info()[2]))
 
         self.do_cleanup_files()
         self._return_formatted(kwargs)

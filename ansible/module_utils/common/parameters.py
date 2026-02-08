@@ -22,10 +22,8 @@ from itertools import chain  # pylint: disable=unused-import
 
 from ansible.module_utils.common.collections import is_iterable
 from ansible.module_utils._internal import _no_six
-from ansible.module_utils._internal._datatag import AnsibleSerializable, AnsibleTagHelper
 from ansible.module_utils.common.text.converters import to_bytes, to_native, to_text
 from ansible.module_utils.common.warnings import warn
-from ansible.module_utils.datatag import native_type_name
 from ansible.module_utils.errors import (
     AliasError,
     AnsibleFallbackNotFound,
@@ -428,17 +426,17 @@ def _remove_values_conditions(value, no_log_strings, deferred_removals):
         return value
 
     elif isinstance(value, Sequence):
-        new_value = AnsibleTagHelper.tag_copy(original_value, [])
+        new_value = []
         deferred_removals.append((value, new_value))
         return new_value
 
     elif isinstance(value, Set):
-        new_value = AnsibleTagHelper.tag_copy(original_value, set())
+        new_value = set()
         deferred_removals.append((value, new_value))
         return new_value
 
     elif isinstance(value, Mapping):
-        new_value = AnsibleTagHelper.tag_copy(original_value, {})
+        new_value = {}
         deferred_removals.append((value, new_value))
         return new_value
 
@@ -452,12 +450,8 @@ def _remove_values_conditions(value, no_log_strings, deferred_removals):
 
     elif isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
         return value
-    elif isinstance(value, AnsibleSerializable):
-        return value
     else:
         raise TypeError('Value of unknown type: %s, %s' % (type(value), value))
-
-    value = AnsibleTagHelper.tag_copy(original_value, value)
 
     return value
 
@@ -560,7 +554,7 @@ def _validate_elements(wanted_type, parameter, values, options_context=None, err
             msg = "Elements value for option '%s'" % parameter
             if options_context:
                 msg += " found in '%s'" % " -> ".join(options_context)
-            msg += " is of type %s and we were unable to convert to %s: %s" % (native_type_name(value), wanted_element_type, to_native(e))
+            msg += " is of type %s and we were unable to convert to %s: %s" % (type(value).__name__, wanted_element_type, to_native(e))
             errors.append(ElementError(msg))
     return validated_parameters
 
@@ -628,7 +622,7 @@ def _validate_argument_types(argument_spec, parameters, prefix='', options_conte
                 parameters[param] = _validate_elements(elements_wanted_type, param, elements, options_context, errors)
 
         except (TypeError, ValueError) as e:
-            msg = "argument '%s' is of type %s" % (param, native_type_name(value))
+            msg = "argument '%s' is of type %s" % (param, type(value).__name__)
             if options_context:
                 msg += " found in '%s'." % " -> ".join(options_context)
             msg += " and we were unable to convert to %s: %s" % (wanted_name, to_native(e))
